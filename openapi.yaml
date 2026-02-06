@@ -4,9 +4,15 @@ info:
   version: 1.0.0
   description: |
     전체 페이지 설계를 기반으로 정리한 Damacorch Personal 서비스의 OpenAPI 스펙입니다.
+    
+    인증은 AWS Cognito에서 JWT를 발급/관리하고, 백엔드는 Cognito API를 프록시하거나
+    Cognito가 발급한 JWT를 검증하여 현재 사용자를 식별하는 역할을 합니다.
 servers:
   - url: https://api.example.com
     description: Production server (예시 URL)
+
+security:
+  - bearerAuth: []
 
 paths:
   ####################################################
@@ -14,8 +20,9 @@ paths:
   ####################################################
   /api/auth/signup:
     post:
-      summary: 회원가입
+      summary: 회원가입 (Cognito SignUp 프록시)
       tags: [Auth]
+      security: []
       requestBody:
         required: true
         content:
@@ -24,7 +31,7 @@ paths:
               $ref: '#/components/schemas/SignupRequest'
       responses:
         '200':
-          description: 회원가입 성공 (자동 로그인 포함 시)
+          description: 회원가입 성공 (Cognito User Pool에 사용자 생성, 필요 시 로컬 users 동기화)
           content:
             application/json:
               schema:
@@ -33,8 +40,9 @@ paths:
                   - $ref: '#/components/schemas/SignupSimpleResponse'
   /api/auth/login:
     post:
-      summary: 이메일/비밀번호 로그인
+      summary: 이메일/비밀번호 로그인 (Cognito InitiateAuth 프록시)
       tags: [Auth]
+      security: []
       requestBody:
         required: true
         content:
@@ -43,7 +51,7 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: 로그인 성공
+          description: 로그인 성공 (Cognito에서 발급한 토큰을 반환)
           content:
             application/json:
               schema:
@@ -424,6 +432,7 @@ paths:
     get:
       summary: 공개 앱 설정(로고 URL 등) 조회
       tags: [AppSettings]
+      security: []
       responses:
         '200':
           description: 공개 설정 값
@@ -433,6 +442,11 @@ paths:
                 $ref: '#/components/schemas/AppSettingsPublicResponse'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     ##################################################
     # 공통 스키마

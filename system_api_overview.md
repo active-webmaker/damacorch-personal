@@ -24,29 +24,19 @@
 
 #### 2.1.1 users
 - **테이블명**: `users`
-- **설명**: 계정 및 기본 프로필 정보 공통 저장소
+- **설명**: 계정 및 기본 프로필 정보 공통 저장소 (인증은 AWS Cognito에서 수행하고, Django는 JWT를 검증하여 사용자 식별)
 - **컬럼 (요약)**
   - `id` (bigint, PK)
   - `email` (varchar(255), unique)
-  - `password_hash` (varchar(255))
   - `name` (varchar(100))
   - `age` (int 또는 birth_year 등)
   - `gender` (varchar(20))
+  - `cognito_sub` (varchar(64), unique) — Cognito User Pool의 `sub` 클레임 값 매핑용
   - `created_at` (datetime)
   - `updated_at` (datetime)
   - `last_login_at` (datetime, nullable)
 
-#### 2.1.2 auth_tokens (선택)
-- **테이블명**: `auth_tokens`
-- **설명**: 액세스/리프레시 토큰 관리용 (세션 기반이면 생략 가능)
-- **컬럼 (요약)**
-  - `id` (bigint, PK)
-  - `user_id` (bigint, FK → users.id)
-  - `token` (varchar(255))
-  - `type` (varchar(20)) — `"access"`, `"refresh"`
-  - `expires_at` (datetime)
-  - `created_at` (datetime)
-  - `revoked_at` (datetime, nullable)
+> 참고: 이 프로젝트에서는 **비밀번호 해시 및 JWT 발급/저장 로직을 로컬 DB에 두지 않고**, AWS Cognito가 비밀번호/토큰을 관리하며, 백엔드는 Cognito가 발급한 JWT를 검증하는 역할만 담당합니다.
 
 ---
 
@@ -208,23 +198,28 @@
 
 ## 3. 주요 API 설계 요약
 
-### 3.1 인증/계정 관련 API
+### 3.1 인증/계정 관련 API (AWS Cognito 프록시 + JWT 검증)
 
 - **POST /api/auth/signup**
-  - 회원가입
+  - 회원가입 요청을 **백엔드가 Cognito SignUp API로 프록시**
   - Body: `name`, `age`, `gender`, `email`, `password`, `passwordConfirm`
-  - 응답: 새 유저 정보 + 토큰 또는 `userId` + 메시지
+  - 내부 동작 (예시)
+    - Cognito User Pool에 사용자 생성 요청
+    - 최초 가입 시 `users` 테이블에 `email`, `cognito_sub` 등을 동기화
+  - 응답: 가입 상태 및 안내 메시지 (이메일 인증 여부 등)
 
 - **POST /api/auth/login**
-  - 이메일/비밀번호 로그인
+  - 이메일/비밀번호 로그인 요청을 **백엔드가 Cognito InitiateAuth(API)를 호출하여 프록시**
   - Body: `email`, `password`
-  - 응답: `user`, `accessToken`, `refreshToken`
+  - 응답: Cognito에서 발급한 `accessToken`, `idToken`(필요 시), `refreshToken` 등을 래핑한 응답
 
 - **POST /api/auth/logout** (선택)
-  - 현재 토큰/세션 무효화
+  - 클라이언트가 보유한 JWT/리프레시 토큰을 무효화하는 요청을 **Cognito Global SignOut 등으로 프록시**
+  - 또는 단순히 클라이언트 측 토큰 삭제 트리거 용도로 사용
 
 - **GET /api/auth/me**
-  - 현재 로그인 유저 정보 조회
+  - `Authorization: Bearer <JWT>` 헤더로 전달된 **Cognito 액세스 토큰/ID 토큰을 Django에서 검증**
+  - 토큰의 `sub`를 `users.cognito_sub`와 매핑하여 현재 로그인 유저 정보 조회
   - 시작 페이지, 홈, 마이페이지 등에서 로그인 상태 체크용
 
 ---

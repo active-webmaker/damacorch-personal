@@ -11,41 +11,27 @@
 
 ### 1. 기본 개념
 - 이 페이지에서 하는 일
-  - 사용자가 이메일/비밀번호로 로그인해서 **인증 토큰(세션)**을 발급받는 진입점
+  - 사용자가 이메일/비밀번호로 로그인해서 **AWS Cognito를 통해 JWT를 발급받는 진입점**
 - 필요한 데이터
-  - 유저 계정 정보 (이메일, 비밀번호 해시 등)
-  - 로그인 상태를 표현하기 위한 세션/토큰 정보
+  - Cognito User Pool 상의 유저 계정 정보 (이메일, 비밀번호 등)
+  - 백엔드/프론트에서 사용할 JWT (access token, id token 등)
 
 ### 2. 주요 테이블
 
-#### 2-1. users (유저 계정 정보)
+#### 2-1. users (유저 계정 정보, Cognito 연동)
 - **테이블명**: `users`
 - 서비스 전반에서 공통으로 사용하는 유저 테이블
 - **컬럼 예시**
   - `id` (bigint, PK)
   - `email` (varchar(255), unique)
-  - `password_hash` (varchar(255))
-    - 비밀번호 원문이 아닌 해시값 저장 (예: bcrypt)
   - `name` (varchar(100), nullable)
+  - `cognito_sub` (varchar(64), unique)
+    - Cognito User Pool의 `sub` 클레임과 매핑되는 값
   - `created_at` (datetime)
   - `updated_at` (datetime)
   - `last_login_at` (datetime, nullable)
 
-#### 2-2. auth_tokens (선택: 세션/토큰 관리)
-- **테이블명**: `auth_tokens`
-- 서버에서 발급한 액세스 토큰/리프레시 토큰 등을 관리하고 싶을 때 사용 (세션 기반이면 생략 가능)
-- **컬럼 예시**
-  - `id` (bigint, PK)
-  - `user_id` (bigint, FK → users.id)
-  - `token` (varchar(255))
-    - 액세스 토큰 또는 리프레시 토큰 값 (실제 구현에 따라 길이/형식 조정)
-  - `type` (varchar(20))
-    - 예: `"access"`, `"refresh"`
-  - `expires_at` (datetime)
-  - `created_at` (datetime)
-  - `revoked_at` (datetime, nullable)
-
-※ 실제 인증 방식(JWT, 세션, OAuth 등)에 따라 이 테이블은 단순 참고용이며, 인프라 설계와 함께 구체화 필요.
+> 비밀번호 해시 및 토큰 저장은 로컬 DB가 아닌 Cognito가 담당하고, 백엔드는 Cognito가 발급한 JWT를 검증해 `users` 레코드와 매핑합니다.
 
 ---
 
@@ -56,7 +42,9 @@
 #### 1) POST /api/auth/login
 - **설명**
   - 이메일/비밀번호로 로그인 시도
-  - 성공 시 토큰 또는 세션 ID를 반환
+  - 백엔드가 AWS Cognito의 **InitiateAuth(또는 관련 로그인 API)**를 호출하는 프록시 역할을 수행
+  - 성공 시 Cognito에서 발급한 JWT(access token, id token, refresh token 등)를 프론트에 전달
+
 - **요청 Body 예시**
   ```json
   {
@@ -64,7 +52,7 @@
     "password": "plain-password"
   }
   ```
-- **응답 예시 (JWT 기반 가정)**
+- **응답 예시 (Cognito JWT 기반)**
   ```json
   {
     "user": {
@@ -72,16 +60,14 @@
       "email": "user@example.com",
       "name": "홍길동"
     },
-    "accessToken": "jwt-access-token-string",
-    "refreshToken": "jwt-refresh-token-string"
+    "accessToken": "cognito-jwt-access-token-string",
+    "refreshToken": "cognito-jwt-refresh-token-string"
   }
   ```
-- **검증 로직 메모**
-  - `users` 테이블에서 `email`로 조회
-  - 입력 받은 `password`를 해시해 `password_hash`와 비교
-  - 성공 시
-    - 필요하다면 `auth_tokens`에 토큰 레코드 생성
-    - `users.last_login_at` 갱신
+- **검증/연동 로직 메모 (서버 측)**
+  - 백엔드는 입력받은 `email`, `password`로 Cognito 로그인 API를 호출
+  - Cognito에서 로그인 성공 시 JWT(accessToken 등)를 발급받아 그대로 또는 래핑하여 클라이언트에 반환
+  - JWT의 `sub`를 기반으로 `users.cognito_sub` 레코드를 조회/생성하고, `last_login_at` 갱신
 
 ### 2. 로그아웃 API (선택)
 

@@ -79,7 +79,7 @@
 - **설명**
   - 현재 로그인한 유저 기준으로 홈 화면에 필요한 모든 데이터를 한 번에 조회
 - **인증**
-  - 로그인 세션/토큰에서 `userId`를 식별한다고 가정
+  - `Authorization: Bearer <Cognito JWT>` 헤더로 전달된 **Cognito JWT**를 검증하여 `userId`(또는 `cognito_sub`)를 식별한다고 가정
 - **응답 예시**
   ```json
   {
