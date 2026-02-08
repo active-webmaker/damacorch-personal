@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-damacorch}
+      POSTGRES_USER: ${POSTGRES_USER:-damacorch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-damacorch}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - damacorch-net
+
+  app:
+    build:
+      context: .
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
+      DB_NAME: ${POSTGRES_DB:-damacorch}
+      DB_USER: ${POSTGRES_USER:-damacorch}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-damacorch}
+      DB_HOST: db
+      DB_PORT: 5432
+      COGNITO_REGION: ${COGNITO_REGION:-}
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID:-}
+      COGNITO_APP_CLIENT_ID: ${COGNITO_APP_CLIENT_ID:-}
+      COGNITO_APP_CLIENT_SECRET: ${COGNITO_APP_CLIENT_SECRET:-}
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    networks:
+      - damacorch-net
+
+volumes:
+  postgres-data:
+
+networks:
+  damacorch-net:
+    driver: bridge
